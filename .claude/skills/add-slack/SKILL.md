@@ -115,15 +115,16 @@ Wait for the user to provide the channel ID.
 
 Use the IPC register flow or register directly. The channel ID, name, and folder name are needed.
 
-For a main channel (responds to all messages, uses the `main` folder):
+For a main channel (responds to all messages):
 
 ```typescript
 registerGroup("slack:<channel-id>", {
   name: "<channel-name>",
-  folder: "main",
+  folder: "slack_main",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: false,
+  isMain: true,
 });
 ```
 
@@ -132,7 +133,7 @@ For additional channels (trigger-only):
 ```typescript
 registerGroup("slack:<channel-id>", {
   name: "<channel-name>",
-  folder: "<folder-name>",
+  folder: "slack_<channel-name>",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: true,

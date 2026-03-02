@@ -21,6 +21,7 @@ interface RegisterArgs {
   folder: string;
   channel: string;
   requiresTrigger: boolean;
+  isMain: boolean;
   assistantName: string;
 }
 
@@ -32,6 +33,7 @@ function parseArgs(args: string[]): RegisterArgs {
     folder: '',
     channel: 'whatsapp', // backward-compat: pre-refactor installs omit --channel
     requiresTrigger: true,
+    isMain: false,
     assistantName: 'Andy',
   };
 
@@ -54,6 +56,9 @@ function parseArgs(args: string[]): RegisterArgs {
         break;
       case '--no-trigger-required':
         result.requiresTrigger = false;
+        break;
+      case '--is-main':
+        result.isMain = true;
         break;
       case '--assistant-name':
         result.assistantName = args[++i] || 'Andy';
@@ -107,13 +112,16 @@ export async function run(args: string[]): Promise<void> {
     trigger_pattern TEXT NOT NULL,
     added_at TEXT NOT NULL,
     container_config TEXT,
-    requires_trigger INTEGER DEFAULT 1
+    requires_trigger INTEGER DEFAULT 1,
+    is_main INTEGER DEFAULT 0
   )`);
+
+  const isMainInt = parsed.isMain ? 1 : 0;
 
   db.prepare(
     `INSERT OR REPLACE INTO registered_groups
-     (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
-     VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+     (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
   ).run(
     parsed.jid,
     parsed.name,
@@ -121,6 +129,7 @@ export async function run(args: string[]): Promise<void> {
     parsed.trigger,
     timestamp,
     requiresTriggerInt,
+    isMainInt,
   );
 
   db.close();
@@ -141,7 +150,7 @@ export async function run(args: string[]): Promise<void> {
 
     const mdFiles = [
       path.join(projectRoot, 'groups', 'global', 'CLAUDE.md'),
-      path.join(projectRoot, 'groups', 'main', 'CLAUDE.md'),
+      path.join(projectRoot, 'groups', parsed.folder, 'CLAUDE.md'),
     ];
 
     for (const mdFile of mdFiles) {

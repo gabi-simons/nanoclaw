@@ -131,15 +131,16 @@ Wait for the user to provide the chat ID (format: `tg:123456789` or `tg:-1001234
 
 Use the IPC register flow or register directly. The chat ID, name, and folder name are needed.
 
-For a main chat (responds to all messages, uses the `main` folder):
+For a main chat (responds to all messages):
 
 ```typescript
 registerGroup("tg:<chat-id>", {
   name: "<chat-name>",
-  folder: "main",
+  folder: "telegram_main",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: false,
+  isMain: true,
 });
 ```
 
@@ -148,7 +149,7 @@ For additional chats (trigger-only):
 ```typescript
 registerGroup("tg:<chat-id>", {
   name: "<chat-name>",
-  folder: "<folder-name>",
+  folder: "telegram_<group-name>",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: true,

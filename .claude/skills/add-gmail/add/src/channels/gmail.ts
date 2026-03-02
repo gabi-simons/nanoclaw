@@ -5,7 +5,7 @@ import path from 'path';
 import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 
-import { MAIN_GROUP_FOLDER } from '../config.js';
+// isMain flag is used instead of MAIN_GROUP_FOLDER constant
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -269,7 +269,7 @@ export class GmailChannel implements Channel {
     // Find the main group to deliver the email notification
     const groups = this.opts.registeredGroups();
     const mainEntry = Object.entries(groups).find(
-      ([, g]) => g.folder === MAIN_GROUP_FOLDER,
+      ([, g]) => g.isMain === true,
     );
 
     if (!mainEntry) {

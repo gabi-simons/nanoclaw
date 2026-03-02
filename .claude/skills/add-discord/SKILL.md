@@ -122,15 +122,16 @@ Wait for the user to provide the channel ID (format: `dc:1234567890123456`).
 
 Use the IPC register flow or register directly. The channel ID, name, and folder name are needed.
 
-For a main channel (responds to all messages, uses the `main` folder):
+For a main channel (responds to all messages):
 
 ```typescript
 registerGroup("dc:<channel-id>", {
   name: "<server-name> #<channel-name>",
-  folder: "main",
+  folder: "discord_main",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: false,
+  isMain: true,
 });
 ```
 
@@ -139,7 +140,7 @@ For additional channels (trigger-only):
 ```typescript
 registerGroup("dc:<channel-id>", {
   name: "<server-name> #<channel-name>",
-  folder: "<folder-name>",
+  folder: "discord_<channel-name>",
   trigger: `@${ASSISTANT_NAME}`,
   added_at: new Date().toISOString(),
   requiresTrigger: true,

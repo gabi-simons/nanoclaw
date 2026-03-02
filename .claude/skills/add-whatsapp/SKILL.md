@@ -207,9 +207,10 @@ npx tsx setup/index.ts --step register \
   --jid "<jid>" \
   --name "<chat-name>" \
   --trigger "@<trigger>" \
-  --folder "main" \
+  --folder "whatsapp_main" \
   --channel whatsapp \
   --assistant-name "<name>" \
+  --is-main \
   --no-trigger-required  # Only for main/self-chat
 ```
 
@@ -220,7 +221,7 @@ npx tsx setup/index.ts --step register \
   --jid "<group-jid>" \
   --name "<group-name>" \
   --trigger "@<trigger>" \
-  --folder "<folder-name>" \
+  --folder "whatsapp_<group-name>" \
   --channel whatsapp
 ```
 
