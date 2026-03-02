@@ -12,12 +12,7 @@
   <a href="https://discord.gg/VDdww8qS42"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord&v=2" alt="Discord" valign="middle"></a>&nbsp; • &nbsp;
   <a href="repo-tokens"><img src="repo-tokens/badge.svg" alt="34.9k tokens, 17% of context window" valign="middle"></a>
 </p>
-<p align="center">
-  <a href="https://github.com/qwibitai/nanoclaw/actions"><img src="https://github.com/qwibitai/nanoclaw/workflows/CI/badge.svg" alt="Build Status" valign="middle"></a>&nbsp; • &nbsp;
-  <a href="https://github.com/qwibitai/nanoclaw/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" valign="middle"></a>&nbsp; • &nbsp;
-  <img src="https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white" alt="TypeScript" valign="middle">&nbsp; • &nbsp;
-  <a href="https://github.com/qwibitai/nanoclaw/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" valign="middle"></a>
-</p>
+通过 Claude Code，NanoClaw 可以动态重写自身代码，根据您的需求定制功能。
 
 **新功能：** 首个支持 [Agent Swarms（智能体集群）](https://code.claude.com/docs/en/agent-teams) 的 AI 助手。可轻松组建智能体团队，在您的聊天中高效协作。
 
@@ -39,19 +34,6 @@ claude
 
 > **注意：** 以 `/` 开头的命令（如 `/setup`、`/add-whatsapp`）是 [Claude Code 技能](https://code.claude.com/docs/en/skills)。请在 `claude` CLI 提示符中输入，而非在普通终端中。
 
-## 从旧版本升级
-
-> **破坏性变更。** WhatsApp 不再内置于核心 — 它现在是一个可插拔技能，与其他渠道一样。如果您正在升级现有安装：
->
-> ```bash
-> claude                       # 在 NanoClaw 目录中打开 Claude Code
-> ```
-> ```
-> /add-whatsapp                # 以可插拔渠道形式重新安装 WhatsApp
-> ```
->
-> 您现有的身份验证凭据、群组和计划任务会被保留。该技能只是将 WhatsApp 重新接入新的渠道注册表。
-
 ## 设计哲学
 
 **小巧易懂：** 单一进程，少量源文件。无微服务、无消息队列、无复杂抽象层。让 Claude Code 引导您轻松上手。
@@ -70,7 +52,7 @@ claude
 
 ## 功能支持
 
-- **可插拔渠道** - 通过技能添加 WhatsApp (`/add-whatsapp`)、Telegram (`/add-telegram`)、Discord (`/add-discord`)、Slack (`/add-slack`) 或 Gmail (`/add-gmail`)。可同时运行一个或多个。
+- **多渠道消息** - 通过 WhatsApp、Telegram、Discord、Slack 或 Gmail 与您的助手对话。使用 `/add-whatsapp` 或 `/add-telegram` 等技能添加渠道，可同时运行一个或多个。
 - **隔离的群组上下文** - 每个群组都拥有独立的 `CLAUDE.md` 记忆和隔离的文件系统。它们在各自的容器沙箱中运行，且仅挂载所需的文件系统。
 - **主频道** - 您的私有频道（self-chat），用于管理控制；其他所有群组都完全隔离
 - **计划任务** - 运行 Claude 的周期性作业，并可以给您回发消息
@@ -137,16 +119,16 @@ claude
 ## 架构
 
 ```
-渠道（可插拔） --> SQLite --> 轮询循环 --> 容器 (Claude Agent SDK) --> 响应
+渠道 --> SQLite --> 轮询循环 --> 容器 (Claude Agent SDK) --> 响应
 ```
 
-单一 Node.js 进程。渠道可插拔 — 每个渠道在启动时自注册，编排器连接具有凭据的渠道。智能体在具有文件系统隔离的 Linux 容器中执行。每个群组的消息队列带有并发控制。通过文件系统进行 IPC。
+单一 Node.js 进程。渠道通过技能添加，启动时自注册 — 编排器连接具有凭据的渠道。智能体在具有文件系统隔离的 Linux 容器中执行。每个群组的消息队列带有并发控制。通过文件系统进行 IPC。
 
 完整架构详情请见 [docs/SPEC.md](docs/SPEC.md)。
 
 关键文件：
 - `src/index.ts` - 编排器：状态管理、消息循环、智能体调用
-- `src/channels/registry.ts` - 渠道注册表（可插拔渠道系统）
+- `src/channels/registry.ts` - 渠道注册表（启动时自注册）
 - `src/ipc.ts` - IPC 监听与任务处理
 - `src/router.ts` - 消息格式化与出站路由
 - `src/group-queue.ts` - 带全局并发限制的群组队列
@@ -195,7 +177,7 @@ ANTHROPIC_AUTH_TOKEN=your-token-here
 
 **为什么我的安装不成功？**
 
-我不知道。运行 `claude`，然后运行 `/debug`。如果 Claude 发现一个可能影响其他用户的问题，请开一个 PR 来修改 `SKILL.md` 安装文件。
+如果遇到问题，安装过程中 Claude 会尝试动态修复。如果问题仍然存在，运行 `claude`，然后运行 `/debug`。如果 Claude 发现一个可能影响其他用户的问题，请开一个 PR 来修改 setup SKILL.md。
 
 **什么样的代码更改会被接受？**
 
@@ -208,6 +190,10 @@ ANTHROPIC_AUTH_TOKEN=your-token-here
 ## 社区
 
 有任何疑问或建议？欢迎[加入 Discord 社区](https://discord.gg/VDdww8qS42)与我们交流。
+
+## 更新日志
+
+破坏性变更和迁移说明请见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
