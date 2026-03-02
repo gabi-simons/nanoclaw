@@ -17,14 +17,26 @@ Check if WhatsApp is already configured. If `store/auth/` exists with credential
 ls store/auth/creds.json 2>/dev/null && echo "WhatsApp auth exists" || echo "No WhatsApp auth"
 ```
 
+### Detect environment
+
+Check whether the environment is headless (no display server):
+
+```bash
+[[ -z "$DISPLAY" && -z "$WAYLAND_DISPLAY" && "$OSTYPE" != darwin* ]] && echo "IS_HEADLESS=true" || echo "IS_HEADLESS=false"
+```
+
 ### Ask the user
 
-Use `AskUserQuestion` to collect configuration:
+Use `AskUserQuestion` to collect configuration. **Adapt auth options based on environment:**
 
-AskUserQuestion: How do you want to authenticate WhatsApp?
-- **QR code in browser** (Recommended) - Opens a browser window with a large, scannable QR code
+If IS_HEADLESS=true AND not WSL → AskUserQuestion: How do you want to authenticate WhatsApp?
+- **Pairing code** (Recommended) - Enter a numeric code on your phone (no camera needed, requires phone number)
 - **QR code in terminal** - Displays QR code in the terminal (can be too small on some displays)
+
+Otherwise (macOS, desktop Linux, or WSL) → AskUserQuestion: How do you want to authenticate WhatsApp?
+- **QR code in browser** (Recommended) - Opens a browser window with a large, scannable QR code
 - **Pairing code** - Enter a numeric code on your phone (no camera needed, requires phone number)
+- **QR code in terminal** - Displays QR code in the terminal (can be too small on some displays)
 
 If they chose pairing code:
 
@@ -80,6 +92,8 @@ For QR code in browser (recommended):
 npx tsx setup/index.ts --step whatsapp-auth -- --method qr-browser
 ```
 
+(Bash timeout: 150000ms)
+
 Tell the user:
 
 > A browser window will open with a QR code.
@@ -91,10 +105,10 @@ Tell the user:
 For QR code in terminal:
 
 ```bash
-npx tsx src/whatsapp-auth.ts
+npx tsx setup/index.ts --step whatsapp-auth -- --method qr-terminal
 ```
 
-Tell the user:
+Tell the user to run `npm run auth` in another terminal, then:
 
 > 1. Open WhatsApp > **Settings** > **Linked Devices** > **Link a Device**
 > 2. Scan the QR code displayed in the terminal
@@ -102,8 +116,10 @@ Tell the user:
 For pairing code:
 
 ```bash
-npx tsx src/whatsapp-auth.ts --pairing-code --phone <their-phone-number>
+npx tsx setup/index.ts --step whatsapp-auth -- --method pairing-code --phone <their-phone-number>
 ```
+
+(Bash timeout: 150000ms). Display PAIRING_CODE from output.
 
 Tell the user:
 
@@ -114,6 +130,8 @@ Tell the user:
 > 3. Enter the code immediately
 >
 > If the code expires, re-run the command — a new code will be generated.
+
+**If failed:** qr_timeout → re-run. logged_out → delete `store/auth/` and re-run. 515 → re-run. timeout → ask user, offer retry.
 
 ### Verify authentication succeeded
 
@@ -133,37 +151,13 @@ mkdir -p data/env && cp .env data/env/env
 
 ## Phase 4: Registration
 
-### Determine chat type
+### Configure trigger and channel type
 
-Use `AskUserQuestion`:
+Get the bot's WhatsApp number: `node -e "const c=require('./store/auth/creds.json');console.log(c.me.id.split(':')[0].split('@')[0])"`
 
 AskUserQuestion: Is this a shared phone number (personal WhatsApp) or a dedicated number (separate device)?
 - **Shared number** - Your personal WhatsApp number (recommended: use self-chat or a solo group)
 - **Dedicated number** - A separate phone/SIM for the assistant
-
-AskUserQuestion: Where do you want to chat with the assistant?
-- **Self-chat** (Recommended) - Chat in your own "Message Yourself" conversation
-- **Solo group** - A group with just you and the linked device
-- **Existing group** - An existing WhatsApp group
-
-### Get the JID
-
-For self-chat: The JID is your phone number with `@s.whatsapp.net` (e.g., `1234567890@s.whatsapp.net`). Extract from auth credentials:
-
-```bash
-node -e "const c=JSON.parse(require('fs').readFileSync('store/auth/creds.json','utf-8'));console.log(c.me?.id?.split(':')[0]+'@s.whatsapp.net')"
-```
-
-For groups: Run group sync and list available groups:
-
-```bash
-npx tsx setup/index.ts --step groups
-npx tsx setup/index.ts --step groups --list
-```
-
-The output shows `JID|GroupName` pairs. Have the user identify their group.
-
-### Ask registration details
 
 AskUserQuestion: What trigger word should activate the assistant?
 - **@Andy** - Default trigger
@@ -174,6 +168,37 @@ AskUserQuestion: What should the assistant call itself?
 - **Andy** - Default name
 - **Claw** - Short and easy
 - **Claude** - Match the AI name
+
+AskUserQuestion: Where do you want to chat with the assistant?
+
+**Shared number options:**
+- **Self-chat** (Recommended) - Chat in your own "Message Yourself" conversation
+- **Solo group** - A group with just you and the linked device
+- **Existing group** - An existing WhatsApp group
+
+**Dedicated number options:**
+- **DM with bot** (Recommended) - Direct message the bot's number
+- **Solo group** - A group with just you and the bot
+- **Existing group** - An existing WhatsApp group
+
+### Get the JID
+
+**Self-chat:** JID = your phone number with `@s.whatsapp.net`. Extract from auth credentials:
+
+```bash
+node -e "const c=JSON.parse(require('fs').readFileSync('store/auth/creds.json','utf-8'));console.log(c.me?.id?.split(':')[0]+'@s.whatsapp.net')"
+```
+
+**DM with bot:** Ask for the bot's phone number. JID = `NUMBER@s.whatsapp.net`
+
+**Group (solo, existing):** Run group sync and list available groups:
+
+```bash
+npx tsx setup/index.ts --step groups
+npx tsx setup/index.ts --step groups --list
+```
+
+The output shows `JID|GroupName` pairs. Present candidates as AskUserQuestion (names only, not JIDs).
 
 ### Register the chat
 
