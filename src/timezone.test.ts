@@ -137,10 +137,7 @@ describe('localTimeToUtc', () => {
 
   it('handles negative UTC offset (e.g., America/Los_Angeles, UTC-8 in winter)', () => {
     // 4:00 PM in LA (PST, UTC-8) = midnight UTC next day
-    const result = localTimeToUtc(
-      '2026-02-04T16:00:00',
-      'America/Los_Angeles',
-    );
+    const result = localTimeToUtc('2026-02-04T16:00:00', 'America/Los_Angeles');
     const date = new Date(result);
     expect(date.getUTCHours()).toBe(0);
     expect(date.getUTCDate()).toBe(5);
