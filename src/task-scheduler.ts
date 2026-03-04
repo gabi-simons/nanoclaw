@@ -2,7 +2,7 @@ import { ChildProcess } from 'child_process';
 import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
 
-import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
+import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL } from './config.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -19,6 +19,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
+import { resolveGroupTimezone } from './timezone.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
@@ -128,6 +129,7 @@ async function runTask(
   };
 
   try {
+    const groupTz = resolveGroupTimezone(group);
     const output = await runContainerAgent(
       group,
       {
@@ -138,6 +140,7 @@ async function runTask(
         isMain,
         isScheduledTask: true,
         assistantName: ASSISTANT_NAME,
+        timezone: groupTz,
       },
       (proc, containerName) =>
         deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
@@ -190,7 +193,7 @@ async function runTask(
   let nextRun: string | null = null;
   if (task.schedule_type === 'cron') {
     const interval = CronExpressionParser.parse(task.schedule_value, {
-      tz: TIMEZONE,
+      tz: resolveGroupTimezone(group),
     });
     nextRun = interval.next().toISOString();
   } else if (task.schedule_type === 'interval') {
