@@ -5,6 +5,7 @@ import {
   ASSISTANT_NAME,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
+  TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
 import './channels/index.js';
@@ -43,7 +44,6 @@ import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { resolveGroupTimezone } from './timezone.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -105,25 +105,6 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   );
 }
 
-function updateGroupTimezone(groupFolder: string, timezone: string): void {
-  // Find the JID for this group folder
-  const jid = Object.keys(registeredGroups).find(
-    (k) => registeredGroups[k].folder === groupFolder,
-  );
-  if (!jid) {
-    logger.warn({ groupFolder }, 'Cannot update timezone: group not found');
-    return;
-  }
-  const group = registeredGroups[jid];
-  const updated: RegisteredGroup = {
-    ...group,
-    containerConfig: { ...group.containerConfig, timezone },
-  };
-  registeredGroups[jid] = updated;
-  setRegisteredGroup(jid, updated);
-  logger.info({ groupFolder, timezone }, 'Group timezone updated');
-}
-
 /**
  * Get available groups list for the agent.
  * Returns groups ordered by most recent activity.
@@ -182,8 +163,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (!hasTrigger) return true;
   }
 
-  const groupTz = resolveGroupTimezone(group);
-  const prompt = formatMessages(missedMessages, groupTz);
+  const prompt = formatMessages(missedMessages, TIMEZONE);
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
@@ -323,7 +303,6 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
-        timezone: resolveGroupTimezone(group),
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -418,8 +397,7 @@ async function startMessageLoop(): Promise<void> {
           );
           const messagesToSend =
             allPending.length > 0 ? allPending : groupMessages;
-          const pipeTz = resolveGroupTimezone(group);
-          const formatted = formatMessages(messagesToSend, pipeTz);
+          const formatted = formatMessages(messagesToSend, TIMEZONE);
 
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(
@@ -546,7 +524,6 @@ async function main(): Promise<void> {
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    updateGroupTimezone,
     syncGroups: async (force: boolean) => {
       await Promise.all(
         channels
