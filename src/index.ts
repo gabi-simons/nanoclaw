@@ -52,6 +52,7 @@ let lastTimestamp = '';
 let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
+let pendingCursor: Record<string, string> = {};
 let messageLoopRunning = false;
 
 const channels: Channel[] = [];
@@ -66,6 +67,25 @@ function loadState(): void {
     logger.warn('Corrupted last_agent_timestamp in DB, resetting');
     lastAgentTimestamp = {};
   }
+  // Restore pending cursors — these indicate in-flight messages from a previous run
+  const pendingTs = getRouterState('pending_cursor');
+  try {
+    pendingCursor = pendingTs ? JSON.parse(pendingTs) : {};
+  } catch {
+    pendingCursor = {};
+  }
+  // Roll back any in-flight cursors from a crash/kill
+  for (const [jid, cursor] of Object.entries(pendingCursor)) {
+    logger.info(
+      { group: jid },
+      'Recovery: rolling back in-flight cursor to retry lost messages',
+    );
+    lastAgentTimestamp[jid] = cursor;
+  }
+  if (Object.keys(pendingCursor).length > 0) {
+    pendingCursor = {};
+    saveState();
+  }
   sessions = getAllSessions();
   registeredGroups = getAllRegisteredGroups();
   logger.info(
@@ -77,6 +97,7 @@ function loadState(): void {
 function saveState(): void {
   setRouterState('last_timestamp', lastTimestamp);
   setRouterState('last_agent_timestamp', JSON.stringify(lastAgentTimestamp));
+  setRouterState('pending_cursor', JSON.stringify(pendingCursor));
 }
 
 function registerGroup(jid: string, group: RegisteredGroup): void {
@@ -166,6 +187,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
+  pendingCursor[chatJid] = previousCursor;
   lastAgentTimestamp[chatJid] =
     missedMessages[missedMessages.length - 1].timestamp;
   saveState();
@@ -227,6 +249,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     // If we already sent output to the user, don't roll back the cursor —
     // the user got their response and re-processing would send duplicates.
     if (outputSentToUser) {
+      delete pendingCursor[chatJid];
+      saveState();
       logger.warn(
         { group: group.name },
         'Agent error after output was sent, skipping cursor rollback to prevent duplicates',
@@ -235,6 +259,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
     // Roll back cursor so retries can re-process these messages
     lastAgentTimestamp[chatJid] = previousCursor;
+    delete pendingCursor[chatJid];
     saveState();
     logger.warn(
       { group: group.name },
@@ -243,6 +268,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     return false;
   }
 
+  delete pendingCursor[chatJid];
+  saveState();
   return true;
 }
 

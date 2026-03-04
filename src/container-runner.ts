@@ -174,6 +174,12 @@ function buildVolumeMounts(
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+  // Ensure container's non-root user (node, uid 1000) can write to IPC dir
+  try {
+    execSync(`chown -R 1000:1000 ${JSON.stringify(groupIpcDir)}`);
+  } catch {
+    // chown may fail on macOS (no uid 1000) — only needed on Linux servers
+  }
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
