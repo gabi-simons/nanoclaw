@@ -2,7 +2,7 @@
  * Container Runner for NanoClaw
  * Spawns agent execution in containers and handles IPC
  */
-import { ChildProcess, exec, spawn } from 'child_process';
+import { ChildProcess, exec, execSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -120,6 +120,13 @@ function buildVolumeMounts(
     '.claude',
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
+  fs.mkdirSync(path.join(groupSessionsDir, 'debug'), { recursive: true });
+  // Ensure container's non-root user (node, uid 1000) can write to session dir
+  try {
+    execSync(`chown -R 1000:1000 ${JSON.stringify(groupSessionsDir)}`);
+  } catch {
+    // chown may fail on macOS (no uid 1000) — only needed on Linux servers
+  }
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(
