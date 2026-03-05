@@ -214,8 +214,8 @@ function createBashGuardHook(): HookCallback {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
-            decision: 'block',
-            reason: 'Access to process environment data is restricted.',
+            permissionDecision: 'deny',
+            permissionDecisionReason: 'Access to process environment data is restricted.',
           },
         };
       }
