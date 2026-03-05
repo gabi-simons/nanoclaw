@@ -187,15 +187,41 @@ function createPreCompactHook(assistantName?: string): HookCallback {
 
 // Secrets to strip from Bash tool subprocess environments.
 // These are needed by claude-code for API auth but should never
-// be visible to commands Kit runs.
+// be visible to commands the agent runs.
 const SECRET_ENV_VARS = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'];
 
-function createSanitizeBashHook(): HookCallback {
+// Patterns that indicate attempts to read process environment data.
+// This is a deterrent layer — env -i and privilege separation via gosu
+// are the primary protection.
+const PROC_ENV_PATTERNS = [
+  /\/proc\/[^\s]*environ/,        // /proc/<pid>/environ, /proc/self/environ
+  /\/proc\/[^\s]*cmdline/,        // /proc/<pid>/cmdline (can leak args)
+  /\bps\s[^\n]*\be\b/,           // ps with 'e' flag (shows environment)
+  /\bps\b[^\n]*\beww\b/,         // ps eww
+  /\bfind\b[^\n]*\benviron\b/,   // find ... environ
+  /\bstrings\b[^\n]*\/proc/,     // strings /proc/...
+];
+
+function createBashGuardHook(): HookCallback {
   return async (input, _toolUseId, _context) => {
     const preInput = input as PreToolUseHookInput;
     const command = (preInput.tool_input as { command?: string })?.command;
     if (!command) return {};
 
+    // Block commands that attempt to read process environment
+    for (const pattern of PROC_ENV_PATTERNS) {
+      if (pattern.test(command)) {
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            decision: 'block',
+            reason: 'Access to process environment data is restricted.',
+          },
+        };
+      }
+    }
+
+    // Sanitize: strip secrets from subprocess environment
     const unsetPrefix = `unset ${SECRET_ENV_VARS.join(' ')} 2>/dev/null; `;
     return {
       hookSpecificOutput: {
@@ -451,7 +477,7 @@ async function runQuery(
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
-        PreToolUse: [{ matcher: 'Bash', hooks: [createSanitizeBashHook()] }],
+        PreToolUse: [{ matcher: 'Bash', hooks: [createBashGuardHook()] }],
       },
     }
   })) {

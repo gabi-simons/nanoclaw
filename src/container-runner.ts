@@ -232,14 +232,13 @@ function buildContainerArgs(
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Run as host user so bind-mounted files are accessible.
-  // Skip when running as root (uid 0), as the container's node user (uid 1000),
-  // or when getuid is unavailable (native Windows without WSL).
+  // Pass target UID/GID for privilege drop inside the container.
+  // The entrypoint uses env -i to sanitize the environment, then drops via gosu.
   const hostUid = process.getuid?.();
   const hostGid = process.getgid?.();
   if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
-    args.push('--user', `${hostUid}:${hostGid}`);
-    args.push('-e', 'HOME=/home/node');
+    args.push('-e', `RUN_UID=${hostUid}`);
+    args.push('-e', `RUN_GID=${hostGid}`);
   }
 
   for (const mount of mounts) {

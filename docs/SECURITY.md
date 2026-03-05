@@ -16,10 +16,25 @@
 Agents execute in containers (lightweight Linux VMs), providing:
 - **Process isolation** - Container processes cannot affect the host
 - **Filesystem isolation** - Only explicitly mounted directories are visible
-- **Non-root execution** - Runs as unprivileged `node` user (uid 1000)
+- **Non-root execution** - Runs as unprivileged `node` user (uid 1000) via `gosu`
 - **Ephemeral containers** - Fresh environment per invocation (`--rm`)
+- **Environment isolation** - Layered defense to protect credentials from agent-accessible paths
 
 This is the primary security boundary. Rather than relying on application-level permission checks, the attack surface is limited by what's mounted.
+
+#### Environment Boundary Layers
+
+Credentials (API keys) must be available to the SDK for authentication but should not be discoverable by agent-executed commands. The following layers work together:
+
+1. **Clean process environment** (`env -i`) — The entrypoint starts the node process with a stripped environment containing only safe vars (PATH, HOME, TZ, etc.). No secrets appear in `/proc/<pid>/environ`.
+
+2. **Privilege drop** (`gosu`) — The entrypoint drops to an unprivileged user for the node process, ensuring non-root execution.
+
+3. **Bash hook guard** — A PreToolUse hook blocks commands that pattern-match against `/proc/*/environ`, `ps -e`, and similar process inspection commands. This is a deterrent, not a hard boundary.
+
+4. **Environment variable stripping** (`unset`) — Every Bash command is prefixed with `unset ANTHROPIC_API_KEY ...` to remove secrets from the shell session's environment.
+
+> **Known limitation:** The SDK passes credentials via the `env` option to tool subprocesses. A subprocess's `/proc/self/environ` may still contain the API key at exec time. The hook layer blocks common read patterns, but a determined actor with shell access could bypass string matching. This is an upstream SDK constraint — true credential isolation requires the SDK to separate authentication credentials from the tool execution environment.
 
 ### 2. Mount Security
 
@@ -80,7 +95,7 @@ Only these environment variables are exposed to containers:
 const allowedVars = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
 ```
 
-> **Note:** Anthropic credentials are mounted so that Claude Code can authenticate when the agent runs. However, this means the agent itself can discover these credentials via Bash or file operations. Ideally, Claude Code would authenticate without exposing credentials to the agent's execution environment, but I couldn't figure this out. **PRs welcome** if you have ideas for credential isolation.
+> **Note:** Anthropic credentials are passed to the SDK for authentication. The container entrypoint uses `env -i` and privilege separation to prevent these from appearing in inspectable process environments. However, the SDK passes them to tool subprocesses internally. See "Environment Boundary Layers" above for the full defense-in-depth approach and known limitations.
 
 ## Privilege Comparison
 
