@@ -80,7 +80,16 @@ Only these environment variables are exposed to containers:
 const allowedVars = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'];
 ```
 
-> **Note:** Anthropic credentials are mounted so that Claude Code can authenticate when the agent runs. However, this means the agent itself can discover these credentials via Bash or file operations. Ideally, Claude Code would authenticate without exposing credentials to the agent's execution environment, but I couldn't figure this out. **PRs welcome** if you have ideas for credential isolation.
+**In-Container Credential Protection:**
+
+The Claude Agent SDK requires API credentials as environment variables for its CLI
+subprocess. To prevent Bash tool commands from reading these via `/proc/PID/environ`:
+
+1. `/proc` is remounted with `hidepid=2` in the container entrypoint (kernel-level)
+2. The container starts as root for the remount, then drops to unprivileged `node` user
+3. Bash commands attempting `/proc/*/environ` access are detected and blocked (hook-level)
+4. Secret env vars are `unset` in every Bash subprocess (defense-in-depth)
+5. After `setpriv` drops to unprivileged user, all capabilities (including `SYS_ADMIN`) are lost per `capabilities(7)`
 
 ## Privilege Comparison
 

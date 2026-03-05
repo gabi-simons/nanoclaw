@@ -196,6 +196,24 @@ function createSanitizeBashHook(): HookCallback {
     const command = (preInput.tool_input as { command?: string })?.command;
     if (!command) return {};
 
+    // Defense-in-depth: detect /proc environment access attempts.
+    // The primary defense is hidepid=2 (kernel-level), but log and block
+    // obvious attempts as an additional signal.
+    const lowerCmd = command.toLowerCase();
+    if (
+      (lowerCmd.includes('/proc/') && lowerCmd.includes('environ')) ||
+      lowerCmd.includes('ps eww') ||
+      lowerCmd.includes('ps auxe')
+    ) {
+      log('SECURITY: Blocked /proc/environ access attempt');
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+        },
+      };
+    }
+
     const unsetPrefix = `unset ${SECRET_ENV_VARS.join(' ')} 2>/dev/null; `;
     return {
       hookSpecificOutput: {

@@ -232,13 +232,20 @@ function buildContainerArgs(
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Run as host user so bind-mounted files are accessible.
-  // Skip when running as root (uid 0), as the container's node user (uid 1000),
-  // or when getuid is unavailable (native Windows without WSL).
+  // Security: add SYS_ADMIN for /proc hidepid=2 remount in entrypoint.
+  // After setpriv drops to unprivileged user, all capabilities (including
+  // SYS_ADMIN) are lost per capabilities(7). We keep Docker's default cap set
+  // because --cap-drop=ALL would break Chromium's sandbox in agent-browser.
+  args.push('--cap-add=SYS_ADMIN');
+
+  // Pass target UID/GID as env vars for entrypoint privilege drop.
+  // The container starts as root (for /proc remount), then setpriv drops to
+  // the target user. Skip when running as root (uid 0), as the container's
+  // node user (uid 1000), or when getuid is unavailable (native Windows without WSL).
   const hostUid = process.getuid?.();
   const hostGid = process.getgid?.();
   if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
-    args.push('--user', `${hostUid}:${hostGid}`);
+    args.push('-e', `RUN_UID=${hostUid}`, '-e', `RUN_GID=${hostGid}`);
     args.push('-e', 'HOME=/home/node');
   }
 
