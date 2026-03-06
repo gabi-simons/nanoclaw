@@ -1,5 +1,5 @@
 import { Channel, NewMessage } from './types.js';
-import { formatCurrentTime, formatLocalTime } from './timezone.js';
+import { formatLocalTime } from './timezone.js';
 
 export function escapeXml(s: string): string {
   if (!s) return '';
@@ -19,7 +19,7 @@ export function formatMessages(
     return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}">${escapeXml(m.content)}</message>`;
   });
 
-  const header = `<context timezone="${escapeXml(timezone)}" current_time="${escapeXml(formatCurrentTime(timezone))}" />\n`;
+  const header = `<context timezone="${escapeXml(timezone)}" />\n`;
 
   return `${header}<messages>\n${lines.join('\n')}\n</messages>`;
 }

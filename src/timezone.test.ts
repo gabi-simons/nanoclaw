@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatLocalTime, formatCurrentTime } from './timezone.js';
+import { formatLocalTime } from './timezone.js';
 
 // --- formatLocalTime ---
 
@@ -25,22 +25,5 @@ describe('formatLocalTime', () => {
     // NY is UTC-4 in summer (EDT), Tokyo is UTC+9
     expect(ny).toContain('8:00');
     expect(tokyo).toContain('9:00');
-  });
-});
-
-// --- formatCurrentTime ---
-
-describe('formatCurrentTime', () => {
-  it('returns a string with timezone abbreviation', () => {
-    const result = formatCurrentTime('America/New_York');
-    // Should contain day of week, date, time, and timezone abbreviation
-    expect(result).toMatch(/\d{4}/); // year
-    expect(result).toMatch(/\d{1,2}:\d{2}/); // time
-  });
-
-  it('works for various timezones', () => {
-    expect(() => formatCurrentTime('Europe/London')).not.toThrow();
-    expect(() => formatCurrentTime('Asia/Tokyo')).not.toThrow();
-    expect(() => formatCurrentTime('Africa/Johannesburg')).not.toThrow();
   });
 });

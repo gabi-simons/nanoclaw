@@ -14,30 +14,3 @@ export function formatLocalTime(utcIso: string, timezone: string): string {
     hour12: true,
   });
 }
-
-/**
- * Get the current time formatted for a timezone, for injection into prompts.
- */
-export function formatCurrentTime(timezone: string): string {
-  const now = new Date();
-  const formatted = now.toLocaleString('en-US', {
-    timeZone: timezone,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-  const tzAbbr = now
-    .toLocaleString('en-US', {
-      timeZone: timezone,
-      timeZoneName: 'short',
-    })
-    .split(', ')
-    .pop()!
-    .split(' ')
-    .pop()!;
-  return `${formatted} ${tzAbbr}`;
-}
