@@ -19,9 +19,22 @@ export function formatMessages(
     return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}">${escapeXml(m.content)}</message>`;
   });
 
-  const header = `<context timezone="${escapeXml(timezone)}" />\n`;
+  // Plain-text date header — LLMs reliably read this, unlike XML attributes
+  // which get ignored when the model tries to compute day-of-week itself.
+  const now = new Date();
+  const currentDateTime = now.toLocaleString('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const header = `Current date and time: ${currentDateTime} (${timezone})`;
 
-  return `${header}<messages>\n${lines.join('\n')}\n</messages>`;
+  return `${header}\n\n<messages>\n${lines.join('\n')}\n</messages>`;
 }
 
 export function stripInternalTags(text: string): string {
