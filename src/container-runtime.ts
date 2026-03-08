@@ -3,11 +3,24 @@
  * All runtime-specific logic lives here so swapping runtimes means changing one file.
  */
 import { execSync } from 'child_process';
+import os from 'os';
 
 import { logger } from './logger.js';
 
 /** The container runtime binary name. */
 export const CONTAINER_RUNTIME_BIN = 'docker';
+
+/** Hostname containers use to reach the host machine. */
+export const CONTAINER_HOST_GATEWAY = 'host.docker.internal';
+
+/** CLI args needed for the container to resolve the host gateway. */
+export function hostGatewayArgs(): string[] {
+  // On Linux, host.docker.internal isn't built-in — add it explicitly
+  if (os.platform() === 'linux') {
+    return ['--add-host=host.docker.internal:host-gateway'];
+  }
+  return [];
+}
 
 /** Returns CLI args for a readonly bind mount. */
 export function readonlyMountArgs(

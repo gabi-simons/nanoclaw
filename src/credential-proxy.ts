@@ -64,11 +64,17 @@ export function startCredentialProxy(port: number): Promise<Server> {
           delete headers['x-api-key'];
           headers['x-api-key'] = secrets.ANTHROPIC_API_KEY;
         } else {
-          // OAuth mode: replace placeholder Bearer token with real one.
-          // Let x-api-key pass through — it's the temp key from the exchange.
-          delete headers['authorization'];
-          if (oauthToken) {
-            headers['authorization'] = `Bearer ${oauthToken}`;
+          // OAuth mode: inject real Bearer token only on the token exchange
+          // endpoint. After exchange, the container uses the temp API key
+          // via x-api-key which is valid as-is — no Authorization needed.
+          const isTokenExchange = req.url?.startsWith(
+            '/api/oauth/claude_cli/create_api_key',
+          );
+          if (isTokenExchange) {
+            delete headers['authorization'];
+            if (oauthToken) {
+              headers['authorization'] = `Bearer ${oauthToken}`;
+            }
           }
         }
 
@@ -102,15 +108,13 @@ export function startCredentialProxy(port: number): Promise<Server> {
       });
     });
 
-    server.listen(port, '0.0.0.0', () => {
+    server.listen(port, '127.0.0.1', () => {
       logger.info({ port, authMode }, 'Credential proxy started');
       resolve(server);
     });
 
     server.on('error', reject);
   });
-
-  // Export for container-runner to determine which placeholder to set
 }
 
 /** Detect which auth mode the host is configured for. */
