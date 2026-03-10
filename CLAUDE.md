@@ -26,6 +26,7 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 | Skill | When to Use |
 |-------|-------------|
 | `/setup` | First-time installation, authentication, service configuration |
+| `/setup-docker-sandbox` | Set up NanoClaw inside a Docker AI Sandbox (isolated microVM) |
 | `/customize` | Adding channels, integrations, changing behavior |
 | `/debug` | Container issues, logs, troubleshooting |
 | `/update-nanoclaw` | Bring upstream NanoClaw updates into a customized install |
