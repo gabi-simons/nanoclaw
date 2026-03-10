@@ -12,6 +12,7 @@
  */
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
+import { Agent } from 'http';
 import { request as httpRequest, RequestOptions } from 'http';
 
 import { readEnvFile } from './env.js';
@@ -23,7 +24,7 @@ export interface ProxyConfig {
   authMode: AuthMode;
 }
 
-export function startCredentialProxy(
+export async function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
 ): Promise<Server> {
@@ -43,6 +44,19 @@ export function startCredentialProxy(
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
+
+  // Sandbox: route upstream requests through HTTPS MITM proxy if present
+  const httpsProxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
+  let proxyAgent: Agent | undefined;
+  if (httpsProxyUrl && isHttps) {
+    try {
+      // Dynamic import: https-proxy-agent is only installed in sandbox environments
+      const proxyMod = 'https-proxy-agent';
+      const mod = await import(/* webpackIgnore: true */ proxyMod);
+      proxyAgent = new mod.HttpsProxyAgent(httpsProxyUrl) as unknown as Agent;
+      logger.info({ proxy: httpsProxyUrl }, 'Credential proxy using HTTPS proxy agent');
+    } catch { /* https-proxy-agent not installed — direct connection */ }
+  }
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
@@ -86,6 +100,7 @@ export function startCredentialProxy(
             path: req.url,
             method: req.method,
             headers,
+            ...(proxyAgent ? { agent: proxyAgent } : {}),
           } as RequestOptions,
           (upRes) => {
             res.writeHead(upRes.statusCode!, upRes.headers);
