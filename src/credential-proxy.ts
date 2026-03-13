@@ -13,9 +13,20 @@
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+
+// Create proxy agent for upstream HTTPS requests if proxy env vars are set
+const envProxyUrl =
+  process.env.https_proxy ||
+  process.env.HTTPS_PROXY ||
+  process.env.http_proxy ||
+  process.env.HTTP_PROXY;
+const upstreamProxyAgent = envProxyUrl
+  ? new HttpsProxyAgent(envProxyUrl)
+  : undefined;
 
 export type AuthMode = 'api-key' | 'oauth';
 
@@ -23,7 +34,7 @@ export interface ProxyConfig {
   authMode: AuthMode;
 }
 
-export function startCredentialProxy(
+export async function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
 ): Promise<Server> {
@@ -43,6 +54,9 @@ export function startCredentialProxy(
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
+
+  // Proxy agent is handled globally by proxy-bootstrap.ts (sets https.globalAgent).
+  // httpsRequest() picks it up automatically — no per-request agent needed.
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
@@ -86,6 +100,7 @@ export function startCredentialProxy(
             path: req.url,
             method: req.method,
             headers,
+            agent: isHttps ? upstreamProxyAgent : undefined,
           } as RequestOptions,
           (upRes) => {
             res.writeHead(upRes.statusCode!, upRes.headers);

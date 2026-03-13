@@ -11,7 +11,27 @@ Run setup steps automatically. Only pause when user action is required (channel 
 
 **UX Note:** Use `AskUserQuestion` for all user-facing questions.
 
-## 0. Git & Fork Setup
+## 0. Sandbox Bootstrap (conditional)
+
+Check if running inside a Docker Sandbox by looking for `sandbox/init.sh` AND the file `$HOME/.nanoclaw-workspace` does NOT exist (meaning init hasn't run yet):
+
+```bash
+test -f sandbox/init.sh && ! test -f "$HOME/.nanoclaw-initialized"
+```
+
+**If both conditions are true** (sandbox init script exists and hasn't been run yet):
+
+Tell the user: "Detected Docker Sandbox environment. Running initial setup..." Then run:
+
+```bash
+bash sandbox/init.sh
+```
+
+This configures the sandbox proxy, fixes CRLF line endings, and installs npm packages (using a /tmp workaround for virtiofs symlink limitations). It takes 2-5 minutes. Run it in the background with a long timeout and wait for completion, then continue to step 1.
+
+**If the conditions are false** (not a sandbox, or already initialized): skip this step.
+
+## 0b. Git & Fork Setup
 
 Check the git remote configuration to ensure the user has a fork and upstream is configured.
 
@@ -52,7 +72,9 @@ Already configured. Continue.
 
 ## 1. Bootstrap (Node.js + Dependencies)
 
-Run `bash setup.sh` and parse the status block.
+**If sandbox init already ran** (`test -f "$HOME/.nanoclaw-initialized"`): skip this step entirely — `init.sh` already installed Node dependencies, build tools, and native modules. Jump to step 2.
+
+**Otherwise:** Run `bash setup.sh` and parse the status block.
 
 - If NODE_OK=false → Node.js is missing or too old. Use `AskUserQuestion: Would you like me to install Node.js 22?` If confirmed:
   - macOS: `brew install node@22` (if brew available) or install nvm then `nvm install 22`
@@ -74,7 +96,9 @@ Run `npx tsx setup/index.ts --step environment` and parse the status block.
 
 ### 3a. Choose runtime
 
-Check the preflight results for `APPLE_CONTAINER` and `DOCKER`, and the PLATFORM from step 1.
+**If IS_SANDBOX=true:** Docker is the only runtime (DinD inside sandbox). Skip the runtime question and go directly to 3a-docker.
+
+**If IS_SANDBOX=false:** Check the preflight results for `APPLE_CONTAINER` and `DOCKER`, and the PLATFORM from step 1.
 
 - PLATFORM=linux → Docker (only option)
 - PLATFORM=macos + APPLE_CONTAINER=installed → Use `AskUserQuestion: Docker (cross-platform) or Apple Container (native macOS)?` If Apple Container, run `/convert-to-apple-container` now, then skip to 3c.
@@ -116,11 +140,25 @@ Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse th
 
 If HAS_ENV=true from step 2, read `.env` and check for `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. If present, confirm with user: keep or reconfigure?
 
-AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key?
+AskUserQuestion: "How do you want to authenticate with Claude?"
+- **Claude subscription (Pro/Max) — recommended:** Use your existing Claude subscription. No separate API key or billing needed.
+- **Anthropic API key:** Use an API key from console.anthropic.com (separate billing).
 
-**Subscription:** Tell user to run `claude setup-token` in another terminal, copy the token, add `CLAUDE_CODE_OAUTH_TOKEN=<token>` to `.env`. Do NOT collect the token in chat.
+**Subscription:** Tell user to run `claude setup-token` in another terminal (or in the sandbox terminal), copy the token, then paste it when asked. Use `AskUserQuestion` to collect the token, then write it to `.env` yourself using `printf` (NOT `echo`, which may produce UTF-16 on Windows):
 
-**API key:** Tell user to add `ANTHROPIC_API_KEY=<key>` to `.env`.
+```bash
+printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' '<token>' > .env
+```
+
+After writing, verify: `grep -q 'CLAUDE_CODE_OAUTH_TOKEN' .env && echo OK`. If verification fails, the file may have wrong encoding — re-write it with `printf`.
+
+**API key:** Tell the user: "Go to https://console.anthropic.com → API Keys → Create Key. The key starts with `sk-ant-...`". Collect the key via `AskUserQuestion`, then write it yourself:
+
+```bash
+printf 'ANTHROPIC_API_KEY=%s\n' '<key>' > .env
+```
+
+**If IS_SANDBOX=true:** Also copy `.env` to `data/env/env` (`mkdir -p data/env && cp .env data/env/env`).
 
 ## 5. Set Up Channels
 
@@ -146,11 +184,14 @@ Each skill will:
 4. Register the chat with the correct JID format
 5. Build and verify
 
-**After all channel skills complete**, install dependencies and rebuild — channel merges may introduce new packages:
+**After all channel skills complete**, install dependencies and rebuild:
 
 ```bash
-npm install && npm run build
+npm install --no-bin-links
+npm run build
 ```
+
+The `--no-bin-links` flag prevents symlink errors on virtiofs (Docker sandbox). It is harmless on normal filesystems.
 
 If the build fails, read the error output and fix it (usually a missing dependency). Then continue to step 6.
 
@@ -162,6 +203,10 @@ AskUserQuestion: Agent access to external directories?
 **Yes:** Collect paths/permissions. `npx tsx setup/index.ts --step mounts -- --json '{"allowedRoots":[...],"blockedPatterns":[],"nonMainReadOnly":true}'`
 
 ## 7. Start Service
+
+**If IS_SANDBOX=true:** Skip the service step. After all setup steps complete, auto-start NanoClaw by running `npm start` in the foreground. Tell the user: "Starting NanoClaw... Send a message to your bot to test." Then skip to step 9.
+
+**If IS_SANDBOX=false (normal setup):**
 
 If service already running: unload first.
 - macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist`
@@ -196,8 +241,9 @@ Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
 
 **If STATUS=failed, fix each:**
+- SERVICE=not_found and IS_SANDBOX=true → This is expected (sandbox runs in foreground, no service). Not an error.
 - SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
-- SERVICE=not_found → re-run step 7
+- SERVICE=not_found (non-sandbox) → re-run step 7
 - CREDENTIALS=missing → re-run step 4
 - CHANNEL_AUTH shows `not_found` for any channel → re-invoke that channel's skill (e.g. `/add-telegram`)
 - REGISTERED_GROUPS=0 → re-invoke the channel skills from step 5
