@@ -1,11 +1,11 @@
 ---
 name: contribute
-description: Package an already-built feature into a clean PR against the correct upstream target. Walks through validation, clean branching, and PR creation. Only for features already built and tested.
+description: Package your work into a clean PR against the correct upstream target. Handles skills, bug fixes, simplifications, and channel fixes. Walks through validation, clean branching, and PR creation.
 ---
 
 # About
 
-Package an already-built, already-tested NanoClaw feature into a clean PR. This is a packaging workflow — not a development workflow. If the user hasn't built and used their feature yet, redirect them to `/guidelines` and help them build it first.
+Package your NanoClaw work — skills, bug fixes, simplifications, or channel fixes — into a clean PR against the right upstream target. This is a packaging workflow, not a development workflow. The work should already be built and tested.
 
 The skill interviews the user, validates their contribution, creates an isolated clean branch via git worktree (never touching their working tree), and opens a PR with the correct labels and format.
 
@@ -25,7 +25,7 @@ The skill interviews the user, validates their contribution, creates an isolated
 
 # Goal
 
-Help a contributor package an already-built, already-tested feature into a clean PR against the correct upstream NanoClaw target.
+Help a contributor package their work — skills, bug fixes, simplifications, or channel fixes — into a clean PR against the correct upstream NanoClaw target.
 
 # Operating principles
 
