@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: merge-forward-skills
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
@@ -83,7 +87,17 @@ jobs:
             fi
 
             # Install deps and validate
-            npm ci
+            if ! npm ci; then
+              echo "::warning::npm ci failed for $BRANCH, regenerating lockfile"
+              if ! (npm install --package-lock-only && npm ci); then
+                echo "::warning::Dependency install failed for $BRANCH"
+                git reset --hard "origin/$BRANCH"
+                FAILED="$FAILED $SKILL_NAME"
+                continue
+              fi
+              git add package-lock.json
+              git commit --no-verify -m "chore: regenerate package-lock.json after merge from main"
+            fi
 
             if ! npm run build; then
               echo "::warning::Build failed for $BRANCH"
@@ -100,7 +114,17 @@ jobs:
             fi
 
             # Push the updated branch
-            git push origin "$BRANCH"
+            if ! git push origin "$BRANCH"; then
+              echo "::warning::Push failed for $BRANCH, fetching and retrying"
+              git fetch origin "$BRANCH"
+              if ! git rebase --rebase-merges "origin/$BRANCH" || ! git push origin "$BRANCH"; then
+                echo "::warning::Push retry failed for $BRANCH"
+                git rebase --abort 2>/dev/null || true
+                git reset --hard "origin/$BRANCH"
+                FAILED="$FAILED $SKILL_NAME"
+                continue
+              fi
+            fi
             SUCCEEDED="$SUCCEEDED $SKILL_NAME"
             echo "$BRANCH merged and pushed successfully."
           done
@@ -114,38 +138,65 @@ jobs:
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
           echo "succeeded=$SUCCEEDED" >> "$GITHUB_OUTPUT"
 
-      - name: Open issue for failed merges
+      - name: Open or update issue for failed merges
         if: steps.merge.outputs.failed != ''
         uses: actions/github-script@v7
+        env:
+          FAILED_SKILLS: ${{ steps.merge.outputs.failed }}
         with:
           script: |
-            const failed = '${{ steps.merge.outputs.failed }}'.trim().split(/\s+/);
+            const failed = process.env.FAILED_SKILLS.trim().split(/\s+/);
             const sha = context.sha.substring(0, 7);
-            const body = [
-              `The merge-forward workflow failed to merge \`main\` (${sha}) into the following skill branches:`,
-              '',
-              ...failed.map(s => `- \`skill/${s}\`: merge conflict, build failure, or test failure`),
-              '',
-              'Please resolve manually:',
-              '```bash',
-              ...failed.map(s => [
-                `git checkout skill/${s}`,
-                `git merge main`,
-                `# resolve conflicts, then: git push`,
-                ''
-              ]).flat(),
-              '```',
-              '',
-              `Triggered by push to main: ${context.sha}`
-            ].join('\n');
 
-            await github.rest.issues.create({
+            // Check for existing open skill-maintenance issue
+            const { data: existing } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Merge-forward failed for ${failed.length} skill branch(es) after ${sha}`,
-              body,
-              labels: ['skill-maintenance']
+              labels: 'skill-maintenance',
+              state: 'open',
+              per_page: 1,
             });
+
+            const entry = `- ${sha}: ${failed.map(s => `\`skill/${s}\``).join(', ')}`;
+
+            if (existing.length > 0) {
+              // Append to existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                body: `Merge-forward failed again after ${sha}:\n\n${entry}\n\nResolve manually:\n\`\`\`bash\n${failed.map(s => `git checkout skill/${s}\ngit merge main\n# resolve conflicts, then: git push`).join('\n\n')}\n\`\`\``,
+              });
+              console.log(`Updated existing issue #${existing[0].number}`);
+            } else {
+              // Create new tracking issue
+              const body = [
+                'The merge-forward workflow is failing for the following skill branches.',
+                'This issue will be updated with each subsequent failure until resolved.',
+                '',
+                '## Failures',
+                '',
+                entry,
+                '',
+                '## How to resolve',
+                '```bash',
+                ...failed.map(s => [
+                  `git checkout skill/${s}`,
+                  `git merge main`,
+                  `# resolve conflicts, then: git push`,
+                  ''
+                ]).flat(),
+                '```',
+              ].join('\n');
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Merge-forward failing for skill branches`,
+                body,
+                labels: ['skill-maintenance']
+              });
+            }
 
       - name: Notify channel forks
         if: always()
@@ -162,6 +213,8 @@ jobs:
               'nanoclaw-docker-sandboxes',
               'nanoclaw-docker-sandbox',
               'nanoclaw-docker-sandbox-windows',
+              'nanoclaw-signal',
+              'nanoclaw-matrix',
             ];
             const sha = context.sha.substring(0, 7);
             for (const repo of forks) {
