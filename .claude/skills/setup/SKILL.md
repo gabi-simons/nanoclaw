@@ -90,6 +90,16 @@ Ensure `.env` has the OneCLI URL (create the file if it doesn't exist):
 grep -q 'ONECLI_URL' .env 2>/dev/null || echo 'ONECLI_URL=http://127.0.0.1:10254' >> .env
 ```
 
+## 1b. Install Skills Marketplace
+
+Install the official NanoClaw skills plugin so all feature skills (`/add-telegram`, `/add-slack`, etc.) are available:
+
+```bash
+claude plugin install nanoclaw-skills@nanoclaw-skills --scope project
+```
+
+This is hot-loaded — no restart needed. If the install fails (network issue, repo unavailable), warn the user but continue setup. Channel skills won't be available but operational steps (container, credentials, service) can still proceed.
+
 ## 2. Check Environment
 
 Run `npx tsx setup/index.ts --step environment` and parse the status block.
