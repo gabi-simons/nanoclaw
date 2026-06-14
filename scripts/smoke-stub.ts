@@ -36,6 +36,7 @@ import { routeInbound } from '../src/router.js';
 import { findSession } from '../src/db/sessions.js';
 import { inboundDbPath, outboundDbPath } from '../src/session-manager.js';
 import { killContainer } from '../src/container-runner.js';
+import { ensureContainerConfig, updateContainerConfigScalars } from '../src/db/container-configs.js';
 
 function fail(msg: string): never {
   console.error(`\n✗ SMOKE FAIL: ${msg}`);
@@ -56,6 +57,10 @@ createAgentGroup({
   agent_provider: 'stub', // → container.json provider → createProvider('stub')
   created_at: new Date().toISOString(),
 });
+// A fresh agent group has no container_configs row; the real path seeds one via
+// group-init. Seed it here and pin provider=stub so materializeContainerJson works.
+ensureContainerConfig('ag-smoke');
+updateContainerConfigScalars('ag-smoke', { provider: 'stub' });
 createMessagingGroup({
   id: 'mg-smoke',
   channel_type: 'test',
@@ -133,7 +138,7 @@ while (out.length === 0) {
   out = readOut();
   if (out.length > 0) break;
   if (Date.now() - start > TIMEOUT_MS) {
-    await killContainer(session.id).catch(() => {});
+    killContainer(session.id, 'smoke timeout');
     fail(`timed out after ${TIMEOUT_MS / 1000}s with no messages_out`);
   }
   const s = Math.floor((Date.now() - start) / 1000);
@@ -141,7 +146,7 @@ while (out.length === 0) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 
-await killContainer(session.id).catch(() => {});
+killContainer(session.id, 'smoke complete');
 
 // Golden assert — not just "nonempty" (the weakness the testing-strategy flagged).
 if (out.length !== 1) fail(`expected exactly 1 messages_out row, got ${out.length}`);
