@@ -427,6 +427,16 @@ async function buildContainerArgs(
   // Everything NanoClaw-specific is in container.json (read by runner at startup).
   args.push('-e', `TZ=${TIMEZONE}`);
 
+  // Smoke mode: a credential-free, deterministic spawn for the L4 floor and the
+  // agentops smoke contract. The agent runs the 'stub' provider (no model, no
+  // external API calls), so the OneCLI gateway is intentionally skipped below.
+  // NANOCLAW_STUB_SCRIPT (the stub's scripted response) is the one NanoClaw env
+  // we pass; it is read only by providers/stub.ts and only in this mode.
+  const smokeMode = process.env.NANOCLAW_SMOKE === '1';
+  if (smokeMode && process.env.NANOCLAW_STUB_SCRIPT) {
+    args.push('-e', `NANOCLAW_STUB_SCRIPT=${process.env.NANOCLAW_STUB_SCRIPT}`);
+  }
+
   // Provider-contributed env vars (e.g. XDG_DATA_HOME, OPENCODE_*, NO_PROXY).
   if (providerContribution.env) {
     for (const [key, value] of Object.entries(providerContribution.env)) {
@@ -469,14 +479,21 @@ async function buildContainerArgs(
   // the gateway, we don't spawn. The caller (router or host-sweep) catches
   // the throw, leaves the inbound message pending, and the next sweep tick
   // retries.
-  if (agentIdentifier) {
-    await onecli.ensureAgent({ name: agentGroup.name, identifier: agentIdentifier });
+  if (smokeMode) {
+    // Credential-free by design — see the smoke-mode note above. ensureAgent and
+    // applyContainerConfig are the only credential-bearing steps; skipping them
+    // is exactly what lets the L4 floor run with no vault and no secrets.
+    log.info('OneCLI gateway skipped — credential-free smoke spawn', { containerName });
+  } else {
+    if (agentIdentifier) {
+      await onecli.ensureAgent({ name: agentGroup.name, identifier: agentIdentifier });
+    }
+    const onecliApplied = await onecli.applyContainerConfig(args, { addHostMapping: false, agent: agentIdentifier });
+    if (!onecliApplied) {
+      throw new Error('OneCLI gateway not applied — refusing to spawn container without credentials');
+    }
+    log.info('OneCLI gateway applied', { containerName });
   }
-  const onecliApplied = await onecli.applyContainerConfig(args, { addHostMapping: false, agent: agentIdentifier });
-  if (!onecliApplied) {
-    throw new Error('OneCLI gateway not applied — refusing to spawn container without credentials');
-  }
-  log.info('OneCLI gateway applied', { containerName });
 
   // Override entrypoint: run v2 entry point directly via Bun (no tsc, no stdin).
   args.push('--entrypoint', 'bash');
