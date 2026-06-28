@@ -24,6 +24,7 @@ import { log } from './log.js';
 import { normalizeOptions } from './channels/ask-question.js';
 import { clearOutbox, openInboundDb, openOutboundDb, readOutboxFiles } from './session-manager.js';
 import { pauseTypingRefreshAfterDelivery, setTypingAdapter } from './modules/typing/index.js';
+import { stripEmDashes } from './strip-em-dashes.js';
 import type { OutboundFile } from './channels/adapter.js';
 import type { Session } from './types.js';
 
@@ -367,12 +368,23 @@ async function deliverMessage(
       ? readOutboxFiles(session.agent_group_id, session.id, msg.id, content.files as string[])
       : undefined;
 
+  // Deterministically strip em dashes from agent prose before it leaves the
+  // system. The model is told not to use them (container/CLAUDE.md), but that
+  // is best-effort; this is the guarantee. Only the chat `text` body is agent
+  // prose (system actions returned above). Re-serialize only when something
+  // actually changed so non-prose content reaches the adapter byte-for-byte.
+  let outgoingContent = msg.content;
+  if (typeof content.text === 'string') {
+    const stripped = stripEmDashes(content.text);
+    if (stripped !== content.text) outgoingContent = JSON.stringify({ ...content, text: stripped });
+  }
+
   const platformMsgId = await deliveryAdapter.deliver(
     msg.channel_type,
     msg.platform_id,
     msg.thread_id,
     msg.kind,
-    msg.content,
+    outgoingContent,
     files,
     deliverInstance,
   );
